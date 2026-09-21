@@ -64,9 +64,6 @@ func (dt *dbTracer) TracePrepareEnd(
 	}
 
 	span := trace.SpanFromContext(ctx)
-	if !span.SpanContext().IsValid() {
-		return
-	}
 	defer span.End()
 
 	interval := time.Since(traceData.startTime)

@@ -43,9 +43,6 @@ func (dt *dbTracer) TraceCopyFromEnd(ctx context.Context, conn *pgx.Conn, data p
 	}
 
 	span := trace.SpanFromContext(ctx)
-	if !span.SpanContext().IsValid() {
-		return
-	}
 	defer span.End()
 
 	interval := time.Since(copyFromData.startTime)

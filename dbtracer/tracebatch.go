@@ -122,9 +122,6 @@ func (dt *dbTracer) TraceBatchEnd(ctx context.Context, conn *pgx.Conn, data pgx.
 	}
 
 	span := trace.SpanFromContext(ctx)
-	if !span.SpanContext().IsValid() {
-		return
-	}
 	defer span.End()
 
 	interval := time.Since(traceData.startTime)

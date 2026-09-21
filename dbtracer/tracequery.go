@@ -66,9 +66,6 @@ func (dt *dbTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.
 	dt.recordDBOperationHistogramMetric(ctx, "query", traceData.qMD, interval, data.Err)
 
 	span := trace.SpanFromContext(ctx)
-	if !span.SpanContext().IsValid() {
-		return
-	}
 	defer span.End()
 
 	var logAttrs []slog.Attr

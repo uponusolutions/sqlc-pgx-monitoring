@@ -23,7 +23,7 @@ type traceAcquireData struct {
 func (dt *dbTracer) TraceAcquireStart(ctx context.Context, pool *pgxpool.Pool, data pgxpool.TraceAcquireStartData) context.Context {
 	ctx, _ = dt.getTracer().Start(ctx, "pgxpool.acquire", trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
-			dt.infoAttrs...
+			dt.infoAttrs...,
 		), trace.WithAttributes(pgxPoolConnOperationAcquire))
 
 	return context.WithValue(ctx, dbTracerAcquireCtxKey, &traceAcquireData{
@@ -39,9 +39,6 @@ func (dt *dbTracer) TraceAcquireEnd(ctx context.Context, pool *pgxpool.Pool, dat
 	}
 
 	span := trace.SpanFromContext(ctx)
-	if  !span.SpanContext().IsValid() {
-		return 
-	}
 	defer span.End()
 
 	var logAttrs []slog.Attr
@@ -62,7 +59,7 @@ func (dt *dbTracer) TraceAcquireEnd(ctx context.Context, pool *pgxpool.Pool, dat
 		pgxPoolConnOperationAcquire,
 	))
 
-	dt.acquireConnectionHist.Record(ctx, time.Since(traceData.startTime).Seconds(), 
+	dt.acquireConnectionHist.Record(ctx, time.Since(traceData.startTime).Seconds(),
 		metric.WithAttributes(dt.infoAttrs...))
 
 	if dt.shouldLog(data.Err) {
