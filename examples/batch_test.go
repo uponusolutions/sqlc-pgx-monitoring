@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
 	"github.com/amirsalarsafaei/sqlc-pgx-monitoring/dbtracer"
 

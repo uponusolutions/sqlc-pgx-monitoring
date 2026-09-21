@@ -13,7 +13,7 @@ import (
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/semconv/v1.43.0/dbconv"
 )
 
 type mockStat struct {
@@ -144,7 +144,7 @@ func (s *PoolStatusTestSuite) assertAllMetrics(scopeMetrics metricdata.ScopeMetr
 
 	metrics := scopeMetrics.Metrics
 
-	s.assertUsageMetric(metrics, stats, commonAttrs)
+	s.assertCountMetric(metrics, stats, commonAttrs)
 	s.assertMaxConnsMetric(metrics, stats, commonAttrs)
 	s.assertPendingMetric(metrics, stats, commonAttrs)
 	s.assertAcquireCountMetric(metrics, stats, commonAttrs)
@@ -179,18 +179,18 @@ func (s *PoolStatusTestSuite) assertCommonAttributes(pointAttrs attribute.Set, c
 	}
 }
 
-func (s *PoolStatusTestSuite) assertUsageMetric(metrics []metricdata.Metrics, stats Stat, attrs []attribute.KeyValue) {
+func (s *PoolStatusTestSuite) assertCountMetric(metrics []metricdata.Metrics, stats Stat, attrs []attribute.KeyValue) {
 	s.T().Helper()
-	m := s.findMetric(semconv.DBClientConnectionsUsageName, metrics)
-	s.Assert().Equal(semconv.DBClientConnectionsUsageDescription, m.Description)
-	s.Assert().Equal(semconv.DBClientConnectionsUsageUnit, m.Unit)
+	m := s.findMetric(dbconv.ClientConnectionCount{}.Name(), metrics)
+	s.Assert().Equal(dbconv.ClientConnectionCount{}.Description(), m.Description)
+	s.Assert().Equal(dbconv.ClientConnectionCount{}.Unit(), m.Unit)
 
-	gauge, ok := m.Data.(metricdata.Gauge[int64])
-	s.Require().True(ok, "metric '%s' should be a Gauge[int64]", m.Name)
-	s.Require().Len(gauge.DataPoints, 2, "usage metric should have 2 data points (used, idle)")
+	sum, ok := m.Data.(metricdata.Sum[int64])
+	s.Require().True(ok, "metric '%s' should be a Sum[int64]", m.Name)
+	s.Require().Len(sum.DataPoints, 2, "usage metric should have 2 data points (used, idle)")
 
 	var idlePoint, usedPoint metricdata.DataPoint[int64]
-	for _, p := range gauge.DataPoints {
+	for _, p := range sum.DataPoints {
 		if state, ok := p.Attributes.Value("state"); ok {
 			if state.AsString() == "idle" {
 				idlePoint = p
@@ -210,18 +210,18 @@ func (s *PoolStatusTestSuite) assertUsageMetric(metrics []metricdata.Metrics, st
 
 func (s *PoolStatusTestSuite) assertMaxConnsMetric(metrics []metricdata.Metrics, stats Stat, attrs []attribute.KeyValue) {
 	s.T().Helper()
-	m := s.findMetric(semconv.DBClientConnectionMaxName, metrics)
-	s.Assert().Equal(semconv.DBClientConnectionMaxDescription, m.Description)
-	gauge := s.getGaugeDataPoints(m)
+	m := s.findMetric(dbconv.ClientConnectionMax{}.Name(), metrics)
+	s.Assert().Equal(dbconv.ClientConnectionMax{}.Description(), m.Description)
+	gauge := s.getIntSumDataPoints(m)
 	s.Assert().Equal(int64(stats.MaxConns()), gauge[0].Value)
 	s.assertCommonAttributes(gauge[0].Attributes, attrs)
 }
 
 func (s *PoolStatusTestSuite) assertPendingMetric(metrics []metricdata.Metrics, stats Stat, attrs []attribute.KeyValue) {
 	s.T().Helper()
-	m := s.findMetric(semconv.DBClientConnectionsPendingRequestsName, metrics)
-	s.Assert().Equal(semconv.DBClientConnectionsPendingRequestsDescription, m.Description)
-	gauge := s.getGaugeDataPoints(m)
+	m := s.findMetric(dbconv.ClientConnectionPendingRequests{}.Name(), metrics)
+	s.Assert().Equal(dbconv.ClientConnectionPendingRequests{}.Description(), m.Description)
+	gauge := s.getIntSumDataPoints(m)
 	s.Assert().Equal(int64(stats.ConstructingConns()), gauge[0].Value)
 	s.assertCommonAttributes(gauge[0].Attributes, attrs)
 }
@@ -348,5 +348,12 @@ type erroringMeter struct {
 }
 
 func (m *erroringMeter) Int64ObservableGauge(name string, options ...otelmetric.Int64ObservableGaugeOption) (otelmetric.Int64ObservableGauge, error) {
+	return nil, m.err
+}
+
+func (m *erroringMeter) Int64ObservableUpDownCounter(
+	name string,
+	options ...otelmetric.Int64ObservableUpDownCounterOption,
+) (otelmetric.Int64ObservableUpDownCounter, error) {
 	return nil, m.err
 }

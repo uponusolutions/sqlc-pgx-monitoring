@@ -18,7 +18,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/semconv/v1.43.0/dbconv"
+
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -73,31 +75,19 @@ func NewDBTracer(
 		traceProvider:   otel.GetTracerProvider(),
 		logArgs:         true,
 		logArgsLenLimit: 64,
-		latencyHistogramConfig: struct {
-			name             string
-			unit             string
-			description      string
-			bucketBoundaries []float64
-		}{
-			description:      semconv.DBClientOperationDurationDescription,
-			unit:             semconv.DBClientOperationDurationUnit,
-			name:             semconv.DBClientOperationDurationName,
-			bucketBoundaries: defaultBucketBoundaries,
-		},
-		logger:         slog.Default(),
-		includeSQLText: false,
+		logger:          slog.Default(),
+		includeSQLText:  false,
 	}
 	for _, opt := range opts {
 		opt(&optCtx)
 	}
 
 	meter := optCtx.meterProvider.Meter(optCtx.name)
-	histogram, err := meter.Float64Histogram(
-		optCtx.latencyHistogramConfig.name,
-		metric.WithDescription(optCtx.latencyHistogramConfig.description),
-		metric.WithUnit(optCtx.latencyHistogramConfig.unit),
-		metric.WithExplicitBucketBoundaries(optCtx.latencyHistogramConfig.bucketBoundaries...),
+
+	histogram, err := dbconv.NewClientOperationDuration(meter,
+		metric.WithExplicitBucketBoundaries(defaultBucketBoundaries...),
 	)
+
 	if err != nil {
 		return nil, fmt.Errorf("initializing histogram meter: %w", err)
 	}
@@ -131,7 +121,7 @@ func NewDBTracer(
 	}
 
 	infoSet := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(databaseName),
 	)
 
@@ -141,7 +131,7 @@ func NewDBTracer(
 		shouldLog:             optCtx.shouldLog,
 		logArgs:               optCtx.logArgs,
 		logArgsLenLimit:       optCtx.logArgsLenLimit,
-		dbOperationsHist:      histogram,
+		dbOperationsHist:      histogram.Float64Histogram,
 		traceProvider:         optCtx.traceProvider,
 		traceLibraryName:      optCtx.name,
 		includeQueryText:      optCtx.includeSQLText,

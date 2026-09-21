@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/semconv/v1.43.0/dbconv"
 )
 
 const (
@@ -97,29 +97,17 @@ func register(stater stater, opts ...Option) error {
 		opt(cfg)
 	}
 
-	usage, err := cfg.meter.Int64ObservableGauge(
-		semconv.DBClientConnectionsUsageName,
-		metric.WithDescription(semconv.DBClientConnectionsUsageDescription),
-		metric.WithUnit(semconv.DBClientConnectionsUsageUnit),
-	)
+	usage, err := dbconv.NewClientConnectionCountObservable(cfg.meter)
 	if err != nil {
 		return fmt.Errorf("failed to create usage metric: %w", err)
 	}
 
-	maxConns, err := cfg.meter.Int64ObservableGauge(
-		semconv.DBClientConnectionMaxName,
-		metric.WithDescription(semconv.DBClientConnectionMaxDescription),
-		metric.WithUnit(semconv.DBClientConnectionMaxUnit),
-	)
+	maxConns, err := dbconv.NewClientConnectionMaxObservable(cfg.meter)
 	if err != nil {
 		return fmt.Errorf("failed to create max connections metric: %w", err)
 	}
 
-	pending, err := cfg.meter.Int64ObservableGauge(
-		semconv.DBClientConnectionsPendingRequestsName,
-		metric.WithDescription(semconv.DBClientConnectionsPendingRequestsDescription),
-		metric.WithUnit(semconv.DBClientConnectionPendingRequestsUnit),
-	)
+	pending, err := dbconv.NewClientConnectionPendingRequestsObservable(cfg.meter)
 	if err != nil {
 		return fmt.Errorf("failed to create pending requests metric: %w", err)
 	}
@@ -194,10 +182,10 @@ func register(stater stater, opts ...Option) error {
 			obsOpts := metric.WithAttributes(cfg.attributes...)
 
 			// Gauges
-			o.ObserveInt64(usage, int64(stats.AcquiredConns()), metric.WithAttributes(stateUsed), obsOpts)
-			o.ObserveInt64(usage, int64(stats.IdleConns()), metric.WithAttributes(stateIdle), obsOpts)
-			o.ObserveInt64(maxConns, int64(stats.MaxConns()), obsOpts)
-			o.ObserveInt64(pending, int64(stats.ConstructingConns()), obsOpts)
+			o.ObserveInt64(usage.Inst(), int64(stats.AcquiredConns()), metric.WithAttributes(stateUsed), obsOpts)
+			o.ObserveInt64(usage.Inst(), int64(stats.IdleConns()), metric.WithAttributes(stateIdle), obsOpts)
+			o.ObserveInt64(maxConns.Inst(), int64(stats.MaxConns()), obsOpts)
+			o.ObserveInt64(pending.Inst(), int64(stats.ConstructingConns()), obsOpts)
 
 			// Counters
 			o.ObserveInt64(acquireCount, stats.AcquireCount(), obsOpts)
@@ -216,7 +204,7 @@ func register(stater stater, opts ...Option) error {
 			return nil
 		},
 		// Register all instruments with the callback.
-		usage, maxConns, pending, acquireCount, canceledAcquireCount, waitedForAcquireCount,
+		usage.Inst(), maxConns.Inst(), pending.Inst(), acquireCount, canceledAcquireCount, waitedForAcquireCount,
 		connsCreated, connsDestroyed, acquireDuration, waitedForAcquireDuration,
 	)
 	if err != nil {

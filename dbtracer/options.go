@@ -10,16 +10,10 @@ import (
 type ShouldLog func(err error) bool
 
 type optionCtx struct {
-	name                   string
-	shouldLog              ShouldLog
-	meterProvider          metric.MeterProvider
-	traceProvider          trace.TracerProvider
-	latencyHistogramConfig struct {
-		name             string
-		unit             string
-		description      string
-		bucketBoundaries []float64
-	}
+	name                  string
+	shouldLog             ShouldLog
+	meterProvider         metric.MeterProvider
+	traceProvider         trace.TracerProvider
 	logger                *slog.Logger
 	logArgs               bool
 	logArgsLenLimit       int
@@ -38,18 +32,6 @@ func WithShouldLog(shouldLog ShouldLog) Option {
 func WithMeterProvider(mp metric.MeterProvider) Option {
 	return func(oc *optionCtx) {
 		oc.meterProvider = mp
-	}
-}
-
-func WithLatencyHistogramConfig(name, unit, description string, bucketBoundaries ...float64) Option {
-	return func(oc *optionCtx) {
-		oc.latencyHistogramConfig.name = name
-		oc.latencyHistogramConfig.unit = unit
-		oc.latencyHistogramConfig.description = description
-
-		if len(bucketBoundaries) != 0 {
-			oc.latencyHistogramConfig.bucketBoundaries = bucketBoundaries
-		}
 	}
 }
 

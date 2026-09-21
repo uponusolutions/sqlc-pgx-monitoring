@@ -21,7 +21,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
 	"examples/db"
 	"examples/db/entities/exampletable"
@@ -36,7 +36,7 @@ func setupTelemetry(ctx context.Context) (func(), error) {
 		resource.WithAttributes(
 			semconv.ServiceName(getEnv("OTEL_SERVICE_NAME", "sqlc-pgx-monitoring-example")),
 			semconv.ServiceVersion(getEnv("OTEL_SERVICE_VERSION", "1.0.0")),
-			semconv.DeploymentEnvironment("development"),
+			semconv.DeploymentEnvironmentNameDevelopment,
 		),
 	)
 	if err != nil {

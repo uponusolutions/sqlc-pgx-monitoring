@@ -23,7 +23,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracetest "go.opentelemetry.io/otel/sdk/trace/tracetest"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/semconv/v1.43.0/dbconv"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -116,11 +117,10 @@ func (s *DBTracerSuite) SetupTest() {
 	s.pgxPool = &pgxpool.Pool{}
 
 	var err error
-	s.histogram, err = s.meter.Float64Histogram(
-		semconv.DBClientOperationDurationName,
-		metric.WithDescription(semconv.DBClientOperationDurationDescription),
-		metric.WithUnit(semconv.DBClientOperationDurationUnit),
-	)
+
+	histogram, err := dbconv.NewClientOperationDuration(s.meter)
+	s.histogram = histogram.Float64Histogram
+
 	s.Require().NoError(err)
 
 	s.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -180,14 +180,6 @@ func (s *DBTracerSuite) TestNewDBTracer() {
 			wantErr: false,
 		},
 		{
-			name:         "successful creation with custom histogram config",
-			databaseName: "test_db",
-			opts: []Option{
-				WithLatencyHistogramConfig("custom.histogram", "ms", "Custom description"),
-			},
-			wantErr: false,
-		},
-		{
 			name:         "successful creation with all options",
 			databaseName: "test_db",
 			opts: []Option{
@@ -196,8 +188,6 @@ func (s *DBTracerSuite) TestNewDBTracer() {
 				WithLogArgs(true),
 				WithLogArgsLenLimit(256),
 				WithIncludeSQLText(true),
-				WithLatencyHistogramConfig("custom.duration", "s", "Custom duration metric",
-					0.1, 10, 100, 1000),
 			},
 			wantErr: false,
 			validateTracer: func(s *DBTracerSuite, t Tracer) {
@@ -270,7 +260,7 @@ func (s *DBTracerSuite) TestTraceQueryStart() {
 	s.Equal(s.defaultQuerySQL.command, attrMap[SQLCQueryCommandKey])
 	s.Equal("query", attrMap[PGXOperationTypeKey])
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 }
 
 func (s *DBTracerSuite) TestTraceQueryEnd_Success() {
@@ -303,7 +293,7 @@ func (s *DBTracerSuite) TestTraceQueryEnd_Success() {
 	s.Equal(s.defaultQuerySQL.command, attrMap[SQLCQueryCommandKey])
 	s.Equal("query", attrMap[PGXOperationTypeKey])
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 
 	// Verify metrics
 	histogramPoints := s.getHistogramPoints()
@@ -315,7 +305,7 @@ func (s *DBTracerSuite) TestTraceQueryEnd_Success() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationQuery,
 		PGXStatusKey.String("OK"),
@@ -358,7 +348,7 @@ func (s *DBTracerSuite) TestTraceQueryEnd_Error() {
 	s.Equal(s.defaultQuerySQL.command, attrMap[SQLCQueryCommandKey])
 	s.Equal("query", attrMap[PGXOperationTypeKey])
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 
 	// Verify that the span has recorded events (error recording)
 	events := span.Events()
@@ -375,7 +365,7 @@ func (s *DBTracerSuite) TestTraceQueryEnd_Error() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationQuery,
 		PGXStatusKey.String("UNKNOWN_ERROR"),
@@ -418,7 +408,7 @@ func (s *DBTracerSuite) TestTraceQueryDuration() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationQuery,
 		PGXStatusKey.String("OK"),
@@ -468,7 +458,7 @@ func (s *DBTracerSuite) TestTraceBatchDuration() {
 	s.True(point.Sum > 0, "Recorded duration should be positive, got %v", point.Sum)
 
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationBatch,
 		PGXStatusKey.String("OK"),
@@ -524,7 +514,7 @@ func (s *DBTracerSuite) TestTracePrepareWithDuration() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationPrepare,
 		PGXStatusKey.String("OK"),
@@ -565,7 +555,7 @@ func (s *DBTracerSuite) TestTracePrepareAlreadyPrepared() {
 	s.Equal("prepare", attrMap[PGXOperationTypeKey])
 	s.Equal(stmtName, attrMap[PGXPrepareStmtNameKey])
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 
 	// Verify metrics
 	histogramPoints := s.getHistogramPoints()
@@ -577,7 +567,7 @@ func (s *DBTracerSuite) TestTracePrepareAlreadyPrepared() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationPrepare,
 		PGXStatusKey.String("OK"),
@@ -622,7 +612,7 @@ func (s *DBTracerSuite) TestTracePrepareError() {
 	s.Equal("prepare", attrMap[PGXOperationTypeKey])
 	s.Equal(stmtName, attrMap[PGXPrepareStmtNameKey])
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 
 	// Verify that the span has recorded events (error recording)
 	events := span.Events()
@@ -639,7 +629,7 @@ func (s *DBTracerSuite) TestTracePrepareError() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationPrepare,
 		PGXStatusKey.String("UNKNOWN_ERROR"),
@@ -677,7 +667,7 @@ func (s *DBTracerSuite) TestTraceConnectSuccess() {
 		}
 	}
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 
 	// Check that duration is positive (actual execution time)
 	duration := span.EndTime().Sub(span.StartTime())
@@ -693,7 +683,7 @@ func (s *DBTracerSuite) TestTraceConnectSuccess() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationConnect,
 		PGXStatusKey.String("OK"),
@@ -731,7 +721,7 @@ func (s *DBTracerSuite) TestTraceConnectError() {
 		}
 	}
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 
 	// Verify that the span has recorded events (error recording)
 	events := span.Events()
@@ -748,7 +738,7 @@ func (s *DBTracerSuite) TestTraceConnectError() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationConnect,
 		PGXStatusKey.String("UNKNOWN_ERROR"),
@@ -788,7 +778,7 @@ func (s *DBTracerSuite) TestTraceCopyFromSuccess() {
 	s.Equal("copy_from", attrMap[PGXOperationTypeKey])
 	s.Equal("\"users\"", attrMap[semconv.DBCollectionNameKey])
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 
 	// Check that duration is positive
 	duration := span.EndTime().Sub(span.StartTime())
@@ -804,7 +794,7 @@ func (s *DBTracerSuite) TestTraceCopyFromSuccess() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationCopyFrom,
 		PGXStatusKey.String("OK"),
@@ -846,7 +836,7 @@ func (s *DBTracerSuite) TestTraceCopyFromError() {
 	s.Equal("copy_from", attrMap[PGXOperationTypeKey])
 	s.Equal("\"users\"", attrMap[semconv.DBCollectionNameKey])
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 
 	// Verify that the span has recorded events (error recording)
 	events := span.Events()
@@ -863,7 +853,7 @@ func (s *DBTracerSuite) TestTraceCopyFromError() {
 
 	// Check attributes
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationCopyFrom,
 		PGXStatusKey.String("UNKNOWN_ERROR"),
@@ -909,7 +899,7 @@ func (s *DBTracerSuite) TestTraceConcurrent() {
 		s.Equal(s.defaultQuerySQL.command, attrMap[SQLCQueryCommandKey].AsString())
 		s.Equal("query", attrMap[PGXOperationTypeKey].AsString())
 		s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey].AsString())
-		s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey].AsString())
+		s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey].AsString())
 	}
 
 	// Verify metrics were aggregated correctly
@@ -922,7 +912,7 @@ func (s *DBTracerSuite) TestTraceConcurrent() {
 	s.True(point.Sum > 0, "Expected positive sum of all durations")
 
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationQuery,
 		PGXStatusKey.String("OK"),
@@ -953,7 +943,6 @@ func (s *DBTracerSuite) TestNewDBTracerWithAllOptions() {
 		WithLogArgs(false),
 		WithLogArgsLenLimit(128),
 		WithIncludeSQLText(true),
-		WithLatencyHistogramConfig("custom.duration", "ms", "Custom duration metric"),
 	)
 
 	s.NoError(err)
@@ -1194,7 +1183,7 @@ func (s *DBTracerSuite) TestTraceBatchWithMultipleQueries() {
 	attrMap := s.attributesToMap(attrs)
 	s.Equal("batch.query", attrMap[PGXOperationTypeKey].AsString())
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey].AsString())
-	s.Equal(semconv.DBSystemPostgreSQL.Value, attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value, attrMap[semconv.DBSystemNameKey])
 	s.Equal(s.defaultQuerySQL.name, attrMap[semconv.DBOperationNameKey].AsString())
 	s.Equal(s.defaultQuerySQL.command, attrMap[SQLCQueryCommandKey].AsString())
 	s.Equal(s.defaultQuerySQL.name, attrMap[SQLCQueryNameKey].AsString())
@@ -1205,7 +1194,7 @@ func (s *DBTracerSuite) TestTraceBatchWithMultipleQueries() {
 
 	s.Equal("batch", attrMap[PGXOperationTypeKey].AsString())
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey].AsString())
-	s.Equal(semconv.DBSystemPostgreSQL.Value, attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value, attrMap[semconv.DBSystemNameKey])
 
 	histogramPoints := s.getHistogramPoints()
 	s.Require().Len(histogramPoints, 1)
@@ -1272,7 +1261,7 @@ func (s *DBTracerSuite) TestTraceBatchStart_WithSpanNameSuffix() {
 	s.Require().Len(histogramPoints, 1)
 
 	expectedAttrs := attribute.NewSet(
-		semconv.DBSystemPostgreSQL,
+		semconv.DBSystemNamePostgreSQL,
 		semconv.DBNamespace(s.defaultDBName),
 		pgxOperationBatch,
 		PGXStatusKey.String("OK"),
@@ -1359,7 +1348,7 @@ func (s *DBTracerSuite) TestTraceQueryStart_WithSpanNameSuffix() {
 	s.Equal(s.defaultQuerySQL.command, attrMap[SQLCQueryCommandKey])
 	s.Equal("query", attrMap[PGXOperationTypeKey])
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey])
-	s.Equal(semconv.DBSystemPostgreSQL.Value.AsString(), attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value.AsString(), attrMap[semconv.DBSystemNameKey])
 }
 
 func (s *DBTracerSuite) TestTracePrepareStart() {
@@ -1405,7 +1394,7 @@ func (s *DBTracerSuite) TestTracePrepareStart() {
 	s.Equal(s.defaultQuerySQL.name, attrMap[SQLCQueryNameKey].AsString())
 	s.Equal(s.defaultQuerySQL.command, attrMap[SQLCQueryCommandKey].AsString())
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey].AsString())
-	s.Equal(semconv.DBSystemPostgreSQL.Value, attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value, attrMap[semconv.DBSystemNameKey])
 }
 
 func (s *DBTracerSuite) TestTraceBatchQuery() {
@@ -1440,7 +1429,7 @@ func (s *DBTracerSuite) TestTraceBatchQuery() {
 
 	s.Equal("batch", attrMap[PGXOperationTypeKey].AsString())
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey].AsString())
-	s.Equal(semconv.DBSystemPostgreSQL.Value, attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value, attrMap[semconv.DBSystemNameKey])
 }
 
 func (s *DBTracerSuite) TestTraceAcquire() {
@@ -1470,7 +1459,7 @@ func (s *DBTracerSuite) TestTraceAcquire() {
 
 	s.Equal("acquire", attrMap[PGXPoolConnOperationKey].AsString())
 	s.Equal(s.defaultDBName, attrMap[semconv.DBNamespaceKey].AsString())
-	s.Equal(semconv.DBSystemPostgreSQL.Value, attrMap[semconv.DBSystemKey])
+	s.Equal(semconv.DBSystemNamePostgreSQL.Value, attrMap[semconv.DBSystemNameKey])
 }
 
 func (s *DBTracerSuite) attributesToMap(attrs []attribute.KeyValue) map[attribute.Key]attribute.Value {

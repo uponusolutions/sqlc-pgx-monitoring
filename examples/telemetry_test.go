@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
 	"github.com/amirsalarsafaei/sqlc-pgx-monitoring/dbtracer"
 )
